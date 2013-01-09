@@ -2,6 +2,25 @@
 #include <Python.h>
 #include "sass_interface.h"
 
+
+#if PY_MAJOR_VERSION >= 3
+    #define MOD_ERROR_VAL NULL
+    #define MOD_SUCCESS_VAL(val) val
+    #define MOD_INIT(name) PyMODINIT_FUNC PyInit_##name(void)
+    #define MOD_DEF(ob, name, doc, methods) \
+          static struct PyModuleDef moduledef = { \
+            PyModuleDef_HEAD_INIT, name, doc, -1, methods, }; \
+          ob = PyModule_Create(&moduledef);
+#else
+    #define MOD_ERROR_VAL
+    #define MOD_SUCCESS_VAL(val)
+    #define MOD_INIT(name) void init##name(void)
+    #define MOD_DEF(ob, name, doc, methods) \
+          ob = Py_InitModule3(name, methods, doc);
+    #define PyLong_FromLong(i) PyInt_FromLong(i)
+#endif
+
+
 static struct {
     char *label;
     int value;
@@ -13,7 +32,9 @@ static struct {
     {NULL}
 };
 
+
 static PyObject *PySass_CompileError;
+
 
 static PyObject *
 PySass_compile(PyObject *self, PyObject *args, PyObject *kwds)
@@ -68,11 +89,11 @@ PySass_compile(PyObject *self, PyObject *args, PyObject *kwds)
     if (output_style == NULL || output_style == Py_None) {
         output_style_v = SASS_STYLE_NESTED;
     }
-    else if (PyString_Check(output_style)) {
-        item_size = PyString_Size(output_style);
+    else if (PyBytes_Check(output_style)) {
+        item_size = PyBytes_Size(output_style);
         if (item_size) {
             for (i = 0; PySass_output_style_enum[i].label; ++i) {
-                if (0 == strncmp(PyString_AsString(output_style),
+                if (0 == strncmp(PyBytes_AsString(output_style),
                                  PySass_output_style_enum[i].label,
                                  item_size)) {
                     output_style_v = PySass_output_style_enum[i].value;
@@ -94,8 +115,8 @@ PySass_compile(PyObject *self, PyObject *args, PyObject *kwds)
     if (include_paths == NULL || include_paths == Py_None) {
         include_paths_v = "";
     }
-    else if (PyString_Check(include_paths)) {
-        include_paths_v = PyString_AsString(include_paths);
+    else if (PyBytes_Check(include_paths)) {
+        include_paths_v = PyBytes_AsString(include_paths);
         ++expected_kwds;
     }
     else if (PySequence_Check(include_paths)) {
@@ -106,13 +127,13 @@ PySass_compile(PyObject *self, PyObject *args, PyObject *kwds)
             if (item == NULL) {
                 return NULL;
             }
-            if (!PyString_Check(item)) {
+            if (!PyBytes_Check(item)) {
                 PyErr_Format(PyExc_TypeError,
                              "include_paths must consists of only strings, "
                              "but #%zd is not a string", i);
                 return NULL;
             }
-            include_paths_size += PyString_Size(item);
+            include_paths_size += PyBytes_Size(item);
         }
         // add glue chars
         if (include_paths_num > 1) {
@@ -127,7 +148,7 @@ PySass_compile(PyObject *self, PyObject *args, PyObject *kwds)
                 ++offset;
             }
             item = PySequence_GetItem(include_paths, i);
-            PyString_AsStringAndSize(item, &item_buffer, &item_size);
+            PyBytes_AsStringAndSize(item, &item_buffer, &item_size);
             strncpy(include_paths_v + offset, item_buffer, item_size);
             offset += item_size;
         }
@@ -143,8 +164,8 @@ PySass_compile(PyObject *self, PyObject *args, PyObject *kwds)
     if (image_path == NULL || image_path == Py_None) {
         image_path_v = ".";
     }
-    else if (PyString_Check(image_path)) {
-        image_path_v = PyString_AsString(image_path);
+    else if (PyBytes_Check(image_path)) {
+        image_path_v = PyBytes_AsString(image_path);
         ++expected_kwds;
     }
     else {
@@ -153,14 +174,14 @@ PySass_compile(PyObject *self, PyObject *args, PyObject *kwds)
     }
 
     if (string) {
-        if (!PyString_Check(string)) {
+        if (!PyBytes_Check(string)) {
             PyErr_SetString(PyExc_TypeError, "string must be a string");
             result = NULL;
             goto finalize;
         }
 
         context.string = sass_new_context();
-        context.string->source_string = PyString_AsString(string);
+        context.string->source_string = PyBytes_AsString(string);
         context.string->options.output_style = output_style_v;
         context.string->options.include_paths = include_paths_v;
         context.string->options.image_path = image_path_v;
@@ -173,20 +194,20 @@ PySass_compile(PyObject *self, PyObject *args, PyObject *kwds)
             goto finalize_string;
         }
 
-        result = PyString_FromString(context.string->output_string);
+        result = PyBytes_FromString(context.string->output_string);
 
 finalize_string:
         sass_free_context(context.string);
         goto finalize;
     }
     else if (filename) {
-        if (!PyString_Check(filename)) {
+        if (!PyBytes_Check(filename)) {
             PyErr_SetString(PyExc_TypeError, "filename must be a string");
             result = NULL;
             goto finalize;
         }
 
-        filename_v = PyString_AsString(filename);
+        filename_v = PyBytes_AsString(filename);
 
         if (access(filename_v, R_OK) < 0) {
             PyErr_Format(PyExc_IOError,
@@ -211,7 +232,7 @@ finalize_string:
             goto finalize_filename;
         }
 
-        result = PyString_FromString(context.filename->output_string);
+        result = PyBytes_FromString(context.filename->output_string);
 
 finalize_filename:
         sass_free_file_context(context.filename);
@@ -231,8 +252,8 @@ finalize_filename:
         output_path = PySequence_GetItem(dirname, 1);
 
         context.dirname = sass_new_folder_context();
-        context.dirname->search_path = PyString_AsString(search_path);
-        context.dirname->output_path = PyString_AsString(output_path);
+        context.dirname->search_path = PyBytes_AsString(search_path);
+        context.dirname->output_path = PyBytes_AsString(output_path);
         context.dirname->options.output_style = output_style_v;
         context.dirname->options.include_paths = include_paths_v;
         context.dirname->options.image_path = image_path_v;
@@ -265,41 +286,43 @@ finalize:
 }
 
 static PyMethodDef PySass_methods[] = {
-    {"compile", PySass_compile, METH_KEYWORDS, "Compile a SASS source."},
+    {"compile", PySass_compile, METH_VARARGS | METH_KEYWORDS, "Compile a SASS source."},
     {NULL, NULL, 0, NULL}
 };
 
-PyMODINIT_FUNC
-initsass()
+
+MOD_INIT(sass)
 {
     PyObject *module, *version, *output_styles;
-    size_t i = 0;
 
-    module = Py_InitModule3("sass", PySass_methods,
-                            "The thin binding of libsass for Python.");
+    MOD_DEF(module, "sass", "The thin binding of libsass for Python.", PySass_methods)
     if (module == NULL) {
-        return;
+        return MOD_ERROR_VAL;
     }
 
     output_styles = PyDict_New();
+
+    size_t i = 0;
     for (i = 0; PySass_output_style_enum[i].label; ++i) {
         PyDict_SetItemString(
             output_styles,
             PySass_output_style_enum[i].label,
-            PyInt_FromLong((long) PySass_output_style_enum[i].value)
+            PyLong_FromLong((long) PySass_output_style_enum[i].value)
         );
     }
-    PyModule_AddObject(module, "OUTPUT_STYLES", output_styles);
+
+    PySass_CompileError = PyErr_NewException("sass.CompileError", PyExc_ValueError, NULL);
+    Py_INCREF(PySass_CompileError);
 
 #ifdef LIBSASS_PYTHON_VERSION
-    version = PyString_FromString(LIBSASS_PYTHON_VERSION);
+    version = PyUnicode_FromString(LIBSASS_PYTHON_VERSION);
 #else
-    version = PyString_FromString("unknown");
+    version = PyUnicode_FromString("unknown");
 #endif
+
+    PyModule_AddObject(module, "OUTPUT_STYLES", output_styles);
     PyModule_AddObject(module, "__version__", version);
-    PySass_CompileError = PyErr_NewException("sass.CompileError",
-                                             PyExc_ValueError,
-                                             NULL);
-    Py_INCREF(PySass_CompileError);
     PyModule_AddObject(module, "CompileError", PySass_CompileError);
+
+    return MOD_SUCCESS_VAL(module);
 }
