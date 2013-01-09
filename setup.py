@@ -62,7 +62,7 @@ else:
 sass_extension = Extension(
     'sass',
     ['sass.c'] + libsass_sources,
-    define_macros=macros.items(),
+    define_macros=list(macros.items()),
     depends=libsass_headers,
     extra_compile_args=['-c', '-O2'] + flags,
     extra_link_args=link_flags,
@@ -145,7 +145,8 @@ setup(
             ['sassc = sassc:main']
         ]
     },
-    tests_require=['Attest', 'Werkzeug'],
+    # tests_require=['Attest', 'Werkzeug'],
+    tests_require=['Attest'],
     test_loader='attest:auto_reporter.test_loader',
     test_suite='sasstests.suite',
     classifiers=[

@@ -2,7 +2,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 """
-from __future__ import absolute_import, with_statement
+
 
 import os
 import os.path
@@ -12,6 +12,7 @@ import pkg_resources
 from sass import CompileError
 from .builder import Manifest
 from .utils import is_mapping
+import collections
 
 __all__ = 'SassMiddleware',
 
@@ -36,7 +37,7 @@ class SassMiddleware(object):
 
     def __init__(self, app, manifests, package_dir={},
                  error_status='500 Internal Server Error'):
-        if not callable(app):
+        if not isinstance(app, collections.Callable):
             raise TypeError('app must be a WSGI-compliant callable object, '
                             'not ' + repr(app))
         self.app = app
@@ -52,7 +53,7 @@ class SassMiddleware(object):
             path = pkg_resources.resource_filename(package_name, '')
             self.package_dir[package_name] = path
         self.paths = []
-        for package_name, manifest in self.manifests.iteritems():
+        for package_name, manifest in self.manifests.items():
             wsgi_path = manifest.wsgi_path
             if not wsgi_path.startswith('/'):
                 wsgi_path = '/' + wsgi_path
@@ -73,7 +74,7 @@ class SassMiddleware(object):
                     result = manifest.build_one(package_dir, sass_filename)
                 except (IOError, OSError):
                     break
-                except CompileError, e:
+                except CompileError as e:
                     start_response(self.error_status,
                                    [('Content-Type', 'text/css')])
                     return [
